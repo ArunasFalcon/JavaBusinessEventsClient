@@ -1,58 +1,62 @@
 package tsbustest;
 
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 
 import org.json.JSONObject;
 
-import com.microsoft.azure.servicebus.ExceptionPhase;
-import com.microsoft.azure.servicebus.IMessage;
-import com.microsoft.azure.servicebus.IMessageHandler;
-import com.microsoft.azure.servicebus.ReceiveMode;
-import com.microsoft.azure.servicebus.SubscriptionClient;
-import com.microsoft.azure.servicebus.primitives.ConnectionStringBuilder;
+import com.azure.messaging.servicebus.ServiceBusClientBuilder;
+import com.azure.messaging.servicebus.ServiceBusErrorContext;
+import com.azure.messaging.servicebus.ServiceBusProcessorClient;
+import com.azure.messaging.servicebus.ServiceBusReceivedMessageContext;
 import com.microsoft.azure.servicebus.primitives.ServiceBusException;
 
 public class TSTopicListener {
 	
-	private String connectionString;
-	private SubscriptionClient subClient;
 	private String finOpsInstance;
 	private String tenantId;
 	private String appId;
 	private String secret;
-	private String subId;
 	FOClient foClient;
+	MessageHandler handler;
+	ServiceBusProcessorClient subClient;
 
 	public static void main(String[] args) throws InterruptedException, ServiceBusException {
-		TSTopicListener listener = new TSTopicListener(args[0], args[1], args[2], args[3], args[4], args[5]);
+		TSTopicListener listener = new TSTopicListener(args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
 		listener.run();
 	}
 	
-	public TSTopicListener(String _connectionString,
+	public TSTopicListener(
+			String _connectionString,
+			String _topicName,
 			String _subscription,
 			String _finOpsInstance,
 			String _tenantId,
 			String _appId,
 			String _secret
 			) throws InterruptedException, ServiceBusException {
-		connectionString = _connectionString;
 		finOpsInstance = _finOpsInstance;
 		tenantId = _tenantId;
 		appId = _appId;
 		secret = _secret;
-		subId = _subscription;
 		foClient = new FOClient(tenantId, appId, secret, finOpsInstance);
-		subClient = new SubscriptionClient(new ConnectionStringBuilder(connectionString,subId), ReceiveMode.PEEKLOCK);
+		handler = new MessageHandler(foClient);
+		subClient = new ServiceBusClientBuilder()
+				.connectionString(_connectionString)
+				.processor()
+				.topicName(_topicName)
+				.subscriptionName(_subscription)
+				.processMessage(t -> handler.onMessageAsync(t))
+				.processError(t -> handler.processError(t))
+				.buildProcessorClient();
 	}
 	
 	public void run() throws InterruptedException, ServiceBusException {
-		subClient.registerMessageHandler(new MessageHandler(foClient));
+		subClient.start();
 	}
 
 }
 
-class MessageHandler implements IMessageHandler{
+class MessageHandler{
 	
 	FOClient foClient;
 	
@@ -60,9 +64,9 @@ class MessageHandler implements IMessageHandler{
 		foClient = client;
 	}
 
-	@Override
-	public CompletableFuture<Void> onMessageAsync(IMessage message) {
-		String messageText = new String(message.getBody(),StandardCharsets.UTF_8);
+	public CompletableFuture<Void> onMessageAsync(ServiceBusReceivedMessageContext context) {
+		var message = context.getMessage();
+		String messageText = message.getBody().toString();
 		System.out.println("Received message: " + messageText);
 		JSONObject event = new JSONObject(messageText);
 		String dataAreaId = event.getString("BusinessEventLegalEntity");
@@ -76,9 +80,11 @@ class MessageHandler implements IMessageHandler{
 		return null;
 	}
 
-	@Override
-	public void notifyException(Throwable exception, ExceptionPhase phase) {
-		System.out.println(phase + " encountered exception: " + exception.getMessage());
+	public void processError(ServiceBusErrorContext context) {
+	    System.out.printf("Error when receiving messages from namespace: '%s'. Entity: '%s'%n",
+	    context.getFullyQualifiedNamespace(), context.getEntityPath());
+	    System.out.printf("Exception occurred: %s%n", context.getException());
+	    return;
 	}
 	
 }
