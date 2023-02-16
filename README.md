@@ -15,11 +15,12 @@ This business event is present in the standard application. After receiving a me
 # Running the client
 The main class is TSTopicListener. The args are:
 - 0: connection string to the service bus (root level listen permissions)
-- 1: name of the subscription (typically this is topicName/subscriptions/subscriptionName)
-- 2: base uri of the FO instance without trailing slash, so it looks like this: https://myinstancename.axcloud.dynamics.com
-- 3: guid of the FO/service principal tenant
-- 4: app id of the service principal
-- 5: service principal secret
+- 1: name of the topic
+- 2: name of the subscription
+- 3: base uri of the FO instance without trailing slash, so it looks like this: https://myinstancename.axcloud.dynamics.com
+- 4: guid of the FO/service principal tenant
+- 5: app id of the service principal
+- 6: service principal secret
 
 # Notes
 
